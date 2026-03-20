@@ -181,6 +181,163 @@ def get_courses_summary():
         "count_by_category": category_count
     }
 
+@app.get("/courses/filter")
+def filter_courses(
+    category: Optional[str] = Query(None),
+    level: Optional[str] = Query(None),
+    max_price: Optional[int] = Query(None),
+    has_seats: Optional[bool] = Query(None)
+):
+    filtered = filter_courses_logic(category, level, max_price, has_seats)
+    return {
+        "courses": filtered,
+        "total": len(filtered),
+        "filters_applied": {
+            "category": category,
+            "level": level,
+            "max_price": max_price,
+            "has_seats": has_seats
+        }
+    }
+
+@app.get("/courses/search")
+def search_courses(keyword: str = Query(..., min_length=1)):
+    keyword_lower = keyword.lower()
+    
+    results = [
+        c for c in courses
+        if (keyword_lower in c["title"].lower() or 
+            keyword_lower in c["instructor"].lower() or 
+            keyword_lower in c["category"].lower())
+    ]
+    
+    return {
+        "results": results,
+        "total_found": len(results),
+        "search_keyword": keyword
+    }
+
+@app.get("/courses/sort")
+def sort_courses(sort_by: str = Query(default="price"), 
+                 order: str = Query(default="asc")):
+    valid_sort_fields = ["price", "title", "seats_left"]
+    
+    if sort_by not in valid_sort_fields:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid sort_by field. Must be one of: {valid_sort_fields}"
+        )
+    
+    sorted_courses = sorted(
+        courses, 
+        key=lambda x: x[sort_by],
+        reverse=(order.lower() == "desc")
+    )
+    
+    return {
+        "sorted_courses": sorted_courses,
+        "sort_by": sort_by,
+        "order": order,
+        "total": len(sorted_courses)
+    }
+
+@app.get("/courses/page")
+def paginate_courses(page: int = Query(default=1, ge=1),
+                     limit: int = Query(default=3, ge=1)):
+    total = len(courses)
+    total_pages = (total + limit - 1) // limit
+    
+    start_idx = (page - 1) * limit
+    end_idx = start_idx + limit
+    
+    paginated_courses = courses[start_idx:end_idx]
+    
+    return {
+        "courses": paginated_courses,
+        "page": page,
+        "limit": limit,
+        "total": total,
+        "total_pages": total_pages,
+        "has_next": page < total_pages,
+        "has_previous": page > 1
+    }
+
+@app.get("/courses/browse")
+def browse_courses(
+    keyword: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    level: Optional[str] = Query(None),
+    max_price: Optional[int] = Query(None),
+    sort_by: str = Query(default="price"),
+    order: str = Query(default="asc"),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=3, ge=1)
+):
+    result = courses.copy()
+    
+    if keyword:
+        keyword_lower = keyword.lower()
+        result = [
+            c for c in result
+            if (keyword_lower in c["title"].lower() or 
+                keyword_lower in c["instructor"].lower() or 
+                keyword_lower in c["category"].lower())
+        ]
+    
+    if category:
+        result = [c for c in result if c["category"].lower() == category.lower()]
+    
+    if level:
+        result = [c for c in result if c["level"].lower() == level.lower()]
+    
+    if max_price:
+        result = [c for c in result if c["price"] <= max_price]
+    
+    # Step 5: Sort
+    valid_sort_fields = ["price", "title", "seats_left"]
+    if sort_by not in valid_sort_fields:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid sort_by field. Must be one of: {valid_sort_fields}"
+        )
+    
+    result = sorted(
+        result,
+        key=lambda x: x[sort_by],
+        reverse=(order.lower() == "desc")
+    )
+    
+    # Step 6: Pagination
+    total = len(result)
+    total_pages = (total + limit - 1) // limit
+    
+    start_idx = (page - 1) * limit
+    end_idx = start_idx + limit
+    
+    paginated_result = result[start_idx:end_idx]
+    
+    return {
+        "results": paginated_result,
+        "filters_applied": {
+            "keyword": keyword,
+            "category": category,
+            "level": level,
+            "max_price": max_price
+        },
+        "sort": {
+            "sort_by": sort_by,
+            "order": order
+        },
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_previous": page > 1
+        }
+    }
+
 @app.get("/courses/{course_id}")
 def get_course_by_id(course_id: int):
     course = find_course(course_id)
@@ -408,70 +565,6 @@ def enroll_all_from_wishlist(data: WishlistEnrollAll):
         "enrollments": enrollments_created
     }
 
-# ==================== DAY 6 - ADVANCED ====================
-
-@app.get("/courses/search")
-def search_courses(keyword: str = Query(..., min_length=1)):
-    keyword_lower = keyword.lower()
-    
-    results = [
-        c for c in courses
-        if (keyword_lower in c["title"].lower() or 
-            keyword_lower in c["instructor"].lower() or 
-            keyword_lower in c["category"].lower())
-    ]
-    
-    return {
-        "results": results,
-        "total_found": len(results),
-        "search_keyword": keyword
-    }
-
-@app.get("/courses/sort")
-def sort_courses(sort_by: str = Query(default="price"), 
-                 order: str = Query(default="asc")):
-    valid_sort_fields = ["price", "title", "seats_left"]
-    
-    if sort_by not in valid_sort_fields:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Invalid sort_by field. Must be one of: {valid_sort_fields}"
-        )
-    
-    sorted_courses = sorted(
-        courses, 
-        key=lambda x: x[sort_by],
-        reverse=(order.lower() == "desc")
-    )
-    
-    return {
-        "sorted_courses": sorted_courses,
-        "sort_by": sort_by,
-        "order": order,
-        "total": len(sorted_courses)
-    }
-
-@app.get("/courses/page")
-def paginate_courses(page: int = Query(default=1, ge=1),
-                     limit: int = Query(default=3, ge=1)):
-    total = len(courses)
-    total_pages = (total + limit - 1) // limit
-    
-    start_idx = (page - 1) * limit
-    end_idx = start_idx + limit
-    
-    paginated_courses = courses[start_idx:end_idx]
-    
-    return {
-        "courses": paginated_courses,
-        "page": page,
-        "limit": limit,
-        "total": total,
-        "total_pages": total_pages,
-        "has_next": page < total_pages,
-        "has_previous": page > 1
-    }
-
 @app.get("/enrollments/search")
 def search_enrollments(student_name: str = Query(..., min_length=1)):
     results = [
@@ -528,80 +621,4 @@ def paginate_enrollments(page: int = Query(default=1, ge=1),
         "total_pages": total_pages,
         "has_next": page < total_pages,
         "has_previous": page > 1
-    }
-
-@app.get("/courses/browse")
-def browse_courses(
-    keyword: Optional[str] = Query(None),
-    category: Optional[str] = Query(None),
-    level: Optional[str] = Query(None),
-    max_price: Optional[int] = Query(None),
-    sort_by: str = Query(default="price"),
-    order: str = Query(default="asc"),
-    page: int = Query(default=1, ge=1),
-    limit: int = Query(default=3, ge=1)
-):
-    result = courses.copy()
-    
-    if keyword:
-        keyword_lower = keyword.lower()
-        result = [
-            c for c in result
-            if (keyword_lower in c["title"].lower() or 
-                keyword_lower in c["instructor"].lower() or 
-                keyword_lower in c["category"].lower())
-        ]
-    
-    if category:
-        result = [c for c in result if c["category"].lower() == category.lower()]
-    
-    if level:
-        result = [c for c in result if c["level"].lower() == level.lower()]
-    
-    if max_price:
-        result = [c for c in result if c["price"] <= max_price]
-    
-    # Step 5: Sort
-    valid_sort_fields = ["price", "title", "seats_left"]
-    if sort_by not in valid_sort_fields:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid sort_by field. Must be one of: {valid_sort_fields}"
-        )
-    
-    result = sorted(
-        result,
-        key=lambda x: x[sort_by],
-        reverse=(order.lower() == "desc")
-    )
-    
-    # Step 6: Pagination
-    total = len(result)
-    total_pages = (total + limit - 1) // limit
-    
-    start_idx = (page - 1) * limit
-    end_idx = start_idx + limit
-    
-    paginated_result = result[start_idx:end_idx]
-    
-    return {
-        "results": paginated_result,
-        "filters_applied": {
-            "keyword": keyword,
-            "category": category,
-            "level": level,
-            "max_price": max_price
-        },
-        "sort": {
-            "sort_by": sort_by,
-            "order": order
-        },
-        "pagination": {
-            "page": page,
-            "limit": limit,
-            "total": total,
-            "total_pages": total_pages,
-            "has_next": page < total_pages,
-            "has_previous": page > 1
-        }
     }
