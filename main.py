@@ -513,7 +513,7 @@ def remove_from_wishlist(course_id: int, student_name: str):
 
 @app.post("/wishlist/enroll-all", status_code=201)
 def enroll_all_from_wishlist(data: WishlistEnrollAll):
-    global enrollment_counter
+    global enrollment_counter, wishlist
     
     student_items = [w for w in wishlist if w["student_name"] == data.student_name]
     
