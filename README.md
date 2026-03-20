@@ -225,11 +225,6 @@ All endpoints have been tested using Swagger UI at `http://127.0.0.1:8000/docs`.
 - **Uvicorn** - ASGI server for running FastAPI
 - **Python 3.8+** - Core programming language
 
-## License
-
-This project is part of the FastAPI Internship program at Innomatics Research Labs.
-
 ---
 
-**Built with FastAPI**  
-*Innomatics Research Labs - Final Project*
+**Built with FastAPI** 
